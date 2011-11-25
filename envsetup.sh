@@ -129,6 +129,14 @@ function check_product()
         echo "Couldn't locate the top of the tree.  Try setting TOP." >&2
         return
     fi
+
+    if (echo -n $1 | grep -q -e "^glaze_") ; then
+       GLAZE_BUILD=$(echo -n $1 | sed -e 's/^glaze_//g')
+    else
+       GLAZE_BUILD=
+    fi
+    export GLAZE_BUILD
+
         TARGET_PRODUCT=$1 \
         TARGET_BUILD_VARIANT= \
         TARGET_BUILD_TYPE= \
