@@ -132,6 +132,7 @@ function check_product()
 
     if (echo -n $1 | grep -q -e "^glaze_") ; then
        GLAZE_BUILD=$(echo -n $1 | sed -e 's/^glaze_//g')
+       export BUILD_NUMBER=$((date +%s%N ; echo $GLAZE_BUILD; hostname) | openssl sha1 | sed -e 's/.*=//g; s/ //g' | cut -c1-10)
     else
        GLAZE_BUILD=
     fi
