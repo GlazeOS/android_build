@@ -179,19 +179,20 @@ include $(BUILD_SYSTEM)/node_fns.mk
 include $(BUILD_SYSTEM)/product.mk
 include $(BUILD_SYSTEM)/device.mk
 
-ifneq ($(strip $(TARGET_BUILD_APPS)),)
-# An unbundled app build needs only the core product makefiles.
-all_product_configs := $(call get-product-makefiles,\
-    $(SRC_TARGET_DIR)/product/AndroidProducts.mk)
+# A Glaze build needs only the Glaze product makefiles.
+ifneq ($(GLAZE_BUILD),)
+  all_product_configs := $(shell ls device/*/$(GLAZE_BUILD)/glaze.mk)
 else
-  ifneq ($(GLAZE_BUILD),)
-    all_product_configs := $(shell ls device/*/$(GLAZE_BUILD)/glaze.mk)
+ ifneq ($(strip $(TARGET_BUILD_APPS)),)
+  # An unbundled app build needs only the core product makefiles.
+  all_product_configs := $(call get-product-makefiles,\
+      $(SRC_TARGET_DIR)/product/AndroidProducts.mk)
   else
     # Read in all of the product definitions specified by the AndroidProducts.mk
     # files in the tree.
     all_product_configs := $(get-all-product-makefiles)
-  endif
-endif
+  endif # TARGET_BUILD_APPS
+endif # GLAZE_BUILD
 
 ifeq ($(GLAZE_BUILD),)
 # Find the product config makefile for the current product.
