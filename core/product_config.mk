@@ -181,7 +181,7 @@ include $(BUILD_SYSTEM)/device.mk
 
 # A Glaze build needs only the Glaze product makefiles.
 ifneq ($(GLAZE_BUILD),)
-  all_product_configs := $(shell ls device/*/$(GLAZE_BUILD)/glaze.mk)
+  all_product_configs := $(shell find device -path "*/$(GLAZE_BUILD)/glaze.mk")
 else
  ifneq ($(strip $(TARGET_BUILD_APPS)),)
   # An unbundled app build needs only the core product makefiles.
