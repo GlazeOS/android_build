@@ -1967,7 +1967,7 @@ else
     OTA_FROM_TARGET_SCRIPT := $(TARGET_RELEASETOOL_OTA_FROM_TARGET_SCRIPT)
 endif
 
-ifneq ($(CM_BUILD),)
+ifneq ($(GLAZE_BUILD),)
     $(INTERNAL_OTA_PACKAGE_TARGET): backuptool := true
 else
     $(INTERNAL_OTA_PACKAGE_TARGET): backuptool := false
@@ -1984,9 +1984,14 @@ $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE)
 	   $(if $(OEM_OTA_CONFIG), -o $(OEM_OTA_CONFIG)) \
 	   $(BUILT_TARGET_FILES_PACKAGE) $@
 
+GLAZE_TARGET_PACKAGE := $(PRODUCT_OUT)/GlazeOS-$(GLAZE_VERSION).zip
+
 .PHONY: otapackage bacon
 otapackage: $(INTERNAL_OTA_PACKAGE_TARGET)
 bacon: otapackage
+	$(hide) ln -f $(INTERNAL_OTA_PACKAGE_TARGET) $(GLAZE_TARGET_PACKAGE)
+	$(hide) $(MD5SUM) $(GLAZE_TARGET_PACKAGE) > $(GLAZE_TARGET_PACKAGE).md5sum
+	@echo -e ${CL_CYN}"Package Complete: $(GLAZE_TARGET_PACKAGE)"${CL_RST}
 
 endif    # build_ota_package
 
