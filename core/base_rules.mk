@@ -210,7 +210,7 @@ ifneq (true,$(LOCAL_UNINSTALLABLE_MODULE))
   # Apk and its attachments reside in its own subdir.
   ifeq ($(LOCAL_MODULE_CLASS),APPS)
   # framework-res.apk doesn't like the additional layer.
-  ifneq ($(LOCAL_NO_STANDARD_LIBRARIES),true)
+  ifeq ($(filter true,$(LOCAL_NO_STANDARD_LIBRARIES) $(LOCAL_IGNORE_SUBDIR)),)
     my_module_path := $(my_module_path)/$(LOCAL_MODULE)
   endif
   endif
@@ -265,7 +265,7 @@ $(cleantarget) : PRIVATE_CLEAN_FILES := \
     $(LOCAL_INSTALLED_MODULE) \
     $(intermediates)
 $(cleantarget)::
-	@echo -e ${CL_GRN}"Clean:"${CL_RST}" $(PRIVATE_MODULE)"
+	@echo "Clean: $(PRIVATE_MODULE)"
 	$(hide) rm -rf $(PRIVATE_CLEAN_FILES)
 
 ###########################################################
@@ -313,12 +313,12 @@ ifneq (true,$(LOCAL_UNINSTALLABLE_MODULE))
 $(LOCAL_INSTALLED_MODULE): PRIVATE_POST_INSTALL_CMD := $(LOCAL_POST_INSTALL_CMD)
 ifneq ($(LOCAL_ACP_UNAVAILABLE),true)
 $(LOCAL_INSTALLED_MODULE): $(LOCAL_BUILT_MODULE) | $(ACP)
-	@echo -e ${CL_CYN}"Install: $@"${CL_RST}
+	@echo "Install: $@"
 	$(copy-file-to-new-target)
 	$(PRIVATE_POST_INSTALL_CMD)
 else
 $(LOCAL_INSTALLED_MODULE): $(LOCAL_BUILT_MODULE)
-	@echo -e ${CL_CYN}"Install: $@"${CL_RST}
+	@echo "Install: $@"
 	$(copy-file-to-target-with-cp)
 endif
 

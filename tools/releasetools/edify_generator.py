@@ -133,8 +133,8 @@ class EdifyGenerator(object):
   def AssertDevice(self, device):
     """Assert that the device identifier is the given string."""
     cmd = ('assert(' +
-           ' || \0'.join(['getprop("ro.product.device") == "%s"' % i
-                         for i in device.split(",")]) +
+           ' || '.join(['getprop("ro.product.device") == "%s" || getprop("ro.build.product") == "%s"'
+                         % (i, i) for i in device.split(",")]) +
            ' || abort("E%d: This package is for device: %s; ' +
            'this device is " + getprop("ro.product.device") + ".");' +
            ');') % (common.ErrorCode.DEVICE_MISMATCH, device)
@@ -143,7 +143,7 @@ class EdifyGenerator(object):
   def AssertSomeBootloader(self, *bootloaders):
     """Assert that the bootloader version is one of *bootloaders."""
     cmd = ("assert(" +
-           " ||\0".join(['getprop("ro.bootloader") == "%s"' % (b,)
+           " || ".join(['getprop("ro.bootloader") == "%s"' % (b,)
                          for b in bootloaders]) +
            ' || abort("This package supports bootloader(s): ' +
            ", ".join(["%s" % (b,) for b in bootloaders]) +
@@ -154,27 +154,21 @@ class EdifyGenerator(object):
   def AssertSomeBaseband(self, *basebands):
     """Assert that the baseband version is one of *basebands."""
     cmd = ("assert(" +
-           " ||\0".join(['getprop("ro.baseband") == "%s"' % (b,)
+           " || ".join(['getprop("ro.baseband") == "%s"' % (b,)
                          for b in basebands]) +
            ' || abort("This package supports baseband(s): ' +
            ", ".join(["%s" % (b,) for b in basebands]) +
            '; this device has baseband " + getprop("ro.baseband") + ".");' +
            ");")
-    self.script.append(self._WordWrap(cmd))
+    self.script.append(self.WordWrap(cmd))
 
   def RunBackup(self, command):
-    self.script.append('package_extract_file("system/bin/backuptool.sh", "/tmp/backuptool.sh");')
-    self.script.append('package_extract_file("system/bin/backuptool.functions", "/tmp/backuptool.functions");')
-    if not self.info.get("use_set_metadata", False):
-      self.script.append('set_perm(0, 0, 0755, "/tmp/backuptool.sh");')
-      self.script.append('set_perm(0, 0, 0644, "/tmp/backuptool.functions");')
-    else:
-      self.script.append('set_metadata("/tmp/backuptool.sh", "uid", 0, "gid", 0, "mode", 0755);')
-      self.script.append('set_metadata("/tmp/backuptool.functions", "uid", 0, "gid", 0, "mode", 0644);')
-    self.script.append(('run_program("/tmp/backuptool.sh", "%s");' % command))
-    if command == "restore":
-        self.script.append('delete("/system/bin/backuptool.sh");')
-        self.script.append('delete("/system/bin/backuptool.functions");')
+    self.script.append(('run_program("/tmp/install/bin/backuptool.sh", "%s");' % command))
+
+  def ValidateSignatures(self, command):
+    self.script.append('package_extract_file("META-INF/org/glazeos/releasekey", "/tmp/releasekey");')
+    # Exit code 124 == abort. run_program returns raw, so left-shift 8bit
+    self.script.append('run_program("/tmp/install/bin/otasigcheck.sh") != "31744" || abort("Can\'t install this package on top of incompatible data. Please try another package or run a factory reset");')
 
   def ShowProgress(self, frac, dur):
     """Update the progress bar, advancing it over 'frac' over the next
@@ -358,6 +352,10 @@ class EdifyGenerator(object):
         self.script.append(
             'write_raw_image(package_extract_file("%(fn)s"), "%(device)s");'
             % args)
+      elif partition_type == "OSIP":
+        self.script.append(
+            'write_osip_image(package_extract_file("%(fn)s"), "%(device)s");'
+            % args)
       elif partition_type == "EMMC":
         if mapfn:
           args["map"] = mapfn
@@ -375,10 +373,10 @@ class EdifyGenerator(object):
     if not self.info.get("use_set_metadata", False):
       self.script.append('set_perm(%d, %d, 0%o, "%s");' % (uid, gid, mode, fn))
     else:
-      if capabilities is None:
-        capabilities = "0x0"
-      cmd = 'set_metadata("%s", "uid", %d, "gid", %d, "mode", 0%o, ' \
-          '"capabilities", %s' % (fn, uid, gid, mode, capabilities)
+      cmd = 'set_metadata("%s", "uid", %d, "gid", %d, "mode", 0%o' \
+          % (fn, uid, gid, mode)
+      if capabilities is not None:
+        cmd += ', "capabilities", %s' % ( capabilities )
       if selabel is not None:
         cmd += ', "selabel", "%s"' % selabel
       cmd += ');'
@@ -391,11 +389,11 @@ class EdifyGenerator(object):
       self.script.append('set_perm_recursive(%d, %d, 0%o, 0%o, "%s");'
                          % (uid, gid, dmode, fmode, fn))
     else:
-      if capabilities is None:
-        capabilities = "0x0"
       cmd = 'set_metadata_recursive("%s", "uid", %d, "gid", %d, ' \
-          '"dmode", 0%o, "fmode", 0%o, "capabilities", %s' \
-          % (fn, uid, gid, dmode, fmode, capabilities)
+          '"dmode", 0%o, "fmode", 0%o' \
+          % (fn, uid, gid, dmode, fmode)
+      if capabilities is not None:
+        cmd += ', "capabilities", "%s"' % ( capabilities )
       if selabel is not None:
         cmd += ', "selabel", "%s"' % selabel
       cmd += ');'
@@ -407,7 +405,7 @@ class EdifyGenerator(object):
     for d, l in symlink_list:
       by_dest.setdefault(d, []).append(l)
 
-    for dest, links in sorted(by_dest.iteritems()):
+    for dest, links in sorted(by_dest.items()):
       cmd = ('symlink("%s", ' % (dest,) +
              ",\0".join(['"' + i + '"' for i in sorted(links)]) + ");")
       self.script.append(self.WordWrap(cmd))

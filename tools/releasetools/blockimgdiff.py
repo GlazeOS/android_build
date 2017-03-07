@@ -438,7 +438,7 @@ class BlockImageDiff(object):
             stashes[sh] -= 1
             if stashes[sh] == 0:
               free_size += sr.size()
-              free_string.append("free %s\n" % (sh))
+              free_string.append("free %s\n" % sh)
               stashes.pop(sh)
           heapq.heappush(free_stash_ids, sid)
 
@@ -697,17 +697,16 @@ class BlockImageDiff(object):
       for xf in self.transfers:
         if xf.style == "zero":
           tgt_size = xf.tgt_ranges.size() * self.tgt.blocksize
-          print("%10d %10d (%6.2f%%) %7s %s %s" % (
-              tgt_size, tgt_size, 100.0, xf.style, xf.tgt_name,
-              str(xf.tgt_ranges)))
+          print("%10d %10d (%6.2f%%) %7s %s" % (
+              tgt_size, tgt_size, 100.0, xf.style, xf.tgt_name))
 
         elif xf.style == "new":
           for piece in self.tgt.ReadRangeSet(xf.tgt_ranges):
             new_f.write(piece)
           tgt_size = xf.tgt_ranges.size() * self.tgt.blocksize
-          print("%10d %10d (%6.2f%%) %7s %s %s" % (
+          print("%10d %10d (%6.2f%%) %7s %s" % (
               tgt_size, tgt_size, 100.0, xf.style,
-              xf.tgt_name, str(xf.tgt_ranges)))
+              xf.tgt_name))
 
         elif xf.style == "diff":
           src = self.src.ReadRangeSet(xf.src_ranges)

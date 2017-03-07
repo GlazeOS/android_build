@@ -30,6 +30,15 @@ else
   endif
 endif
 
+# Many qcom modules don't correctly set a dependency on the kernel headers. Fix it for them,
+# but warn the user.
+ifneq (,$(findstring $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include,$(LOCAL_C_INCLUDES)))
+  ifeq (,$(findstring $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr,$(LOCAL_ADDITIONAL_DEPENDENCIES)))
+    $(warning $(LOCAL_MODULE) uses kernel headers, but does not depend on them!)
+    LOCAL_ADDITIONAL_DEPENDENCIES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
+  endif
+endif
+
 # The following LOCAL_ variables will be modified in this file.
 # Because the same LOCAL_ variables may be used to define modules for both 1st arch and 2nd arch,
 # we can't modify them in place.
@@ -671,13 +680,25 @@ proto_sources_fullpath := $(addprefix $(LOCAL_PATH)/, $(proto_sources))
 proto_generated_cpps := $(addprefix $(proto_gen_dir)/, \
     $(patsubst %.proto,%.pb$(my_proto_source_suffix),$(proto_sources_fullpath)))
 
+define copy-proto-files
+$(if $(PRIVATE_PROTOC_OUTPUT), \
+   $(if $(call streq,$(PRIVATE_PROTOC_INPUT),$(PRIVATE_PROTOC_OUTPUT)),, \
+   $(eval proto_generated_path := $(dir $(subst $(PRIVATE_PROTOC_INPUT),$(PRIVATE_PROTOC_OUTPUT),$@)))
+   @mkdir -p $(dir $(proto_generated_path))
+   @echo "Protobuf relocation: $(basename $@).h => $(proto_generated_path)"
+   @cp -f $(basename $@).h $(proto_generated_path) ),)
+endef
+
 # Ensure the transform-proto-to-cc rule is only defined once in multilib build.
 ifndef $(my_host)$(LOCAL_MODULE_CLASS)_$(LOCAL_MODULE)_proto_defined
 $(proto_generated_cpps): PRIVATE_PROTO_INCLUDES := $(TOP)
 $(proto_generated_cpps): PRIVATE_PROTOC_FLAGS := $(LOCAL_PROTOC_FLAGS) $(my_protoc_flags)
+$(proto_generated_cpps): PRIVATE_PROTOC_OUTPUT := $(LOCAL_PROTOC_OUTPUT)
+$(proto_generated_cpps): PRIVATE_PROTOC_INPUT := $(LOCAL_PATH)
 $(proto_generated_cpps): PRIVATE_RENAME_CPP_EXT := $(my_rename_cpp_ext)
 $(proto_generated_cpps): $(proto_gen_dir)/%.pb$(my_proto_source_suffix): %.proto $(my_protoc_deps) $(PROTOC)
 	$(transform-proto-to-cc)
+	$(copy-proto-files)
 
 $(my_host)$(LOCAL_MODULE_CLASS)_$(LOCAL_MODULE)_proto_defined := true
 endif
@@ -1189,7 +1210,7 @@ import_includes_deps := $(strip \
       $(call intermediates-dir-for,STATIC_LIBRARIES,$(l),$(LOCAL_IS_HOST_MODULE),,$(LOCAL_2ND_ARCH_VAR_PREFIX),$(my_host_cross))/export_includes))
 $(import_includes): PRIVATE_IMPORT_EXPORT_INCLUDES := $(import_includes_deps)
 $(import_includes) : $(LOCAL_MODULE_MAKEFILE_DEP) $(import_includes_deps)
-	@echo -e ${CL_CYN}Import includes file:${CL_RST} $@
+	@echo Import includes file: $@
 	$(hide) mkdir -p $(dir $@) && rm -f $@
 ifdef import_includes_deps
 	$(hide) for f in $(PRIVATE_IMPORT_EXPORT_INCLUDES); do \
@@ -1439,7 +1460,7 @@ $(export_includes): PRIVATE_EXPORT_C_INCLUDE_DIRS := $(my_export_c_include_dirs)
 # By adding $(my_generated_sources) it makes sure the headers get generated
 # before any dependent source files get compiled.
 $(export_includes) : $(my_generated_sources) $(export_include_deps)
-	@echo -e ${CL_CYN}Export includes file:${CL_RST} $< -- $@
+	@echo Export includes file: $< -- $@
 	$(hide) mkdir -p $(dir $@) && rm -f $@.tmp
 ifdef my_export_c_include_dirs
 	$(hide) for d in $(PRIVATE_EXPORT_C_INCLUDE_DIRS); do \

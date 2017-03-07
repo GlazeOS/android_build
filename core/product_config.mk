@@ -179,11 +179,11 @@ include $(BUILD_SYSTEM)/node_fns.mk
 include $(BUILD_SYSTEM)/product.mk
 include $(BUILD_SYSTEM)/device.mk
 
-# A Glaze build needs only the Glaze product makefiles.
+# A GlazeOS build needs only the Glaze product makefiles.
 ifneq ($(GLAZE_BUILD),)
   all_product_configs := $(shell find device -path "*/$(GLAZE_BUILD)/glaze.mk")
 else
- ifneq ($(strip $(TARGET_BUILD_APPS)),)
+  ifneq ($(strip $(TARGET_BUILD_APPS)),)
   # An unbundled app build needs only the core product makefiles.
   all_product_configs := $(call get-product-makefiles,\
       $(SRC_TARGET_DIR)/product/AndroidProducts.mk)

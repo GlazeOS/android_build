@@ -4,7 +4,6 @@ Invoke ". build/envsetup.sh" from your shell to add the following functions to y
 - lunch:     lunch <product_name>-<build_variant>
 - tapas:     tapas [<App1> <App2> ...] [arm|x86|mips|armv5|arm64|x86_64|mips64] [eng|userdebug|user]
 - croot:     Changes directory to the top of the tree.
-- cout:      Changes directory to out.
 - m:         Makes from the top of the tree.
 - mm:        Builds all of the modules in the current directory, but not their dependencies.
 - mmm:       Builds all of the modules in the supplied directories, but not their dependencies.
@@ -49,7 +48,7 @@ function build_build_var_cache()
     cached_vars=`cat $T/build/envsetup.sh $T/vendor/glaze/build/envsetup.sh | tr '()' '  ' | awk '{for(i=1;i<=NF;i++) if($i~/get_build_var/) print $(i+1)}' | sort -u | tr '\n' ' '`
     cached_abs_vars=`cat $T/build/envsetup.sh $T/vendor/glaze/build/envsetup.sh | tr '()' '  ' | awk '{for(i=1;i<=NF;i++) if($i~/get_abs_build_var/) print $(i+1)}' | sort -u | tr '\n' ' '`
     # Call the build system to dump the "<val>=<value>" pairs as a shell script.
-    build_dicts_script=`\cd $T; CALLED_FROM_SETUP=true BUILD_SYSTEM=build/core \
+    build_dicts_script=`\cd $T; export CALLED_FROM_SETUP=true; export BUILD_SYSTEM=build/core; \
                         command make --no-print-directory -f build/core/config.mk \
                         dump-many-vars \
                         DUMP_MANY_VARS="$cached_vars" \
@@ -78,11 +77,11 @@ function build_build_var_cache()
 function destroy_build_var_cache()
 {
     unset BUILD_VAR_CACHE_READY
-    for v in $cached_vars; do
+    for v in $(echo $cached_vars | tr " " "\n"); do
       unset var_cache_$v
     done
     unset cached_vars
-    for v in $cached_abs_vars; do
+    for v in $(echo $cached_abs_vars | tr " " "\n"); do
       unset abs_var_cache_$v
     done
     unset cached_abs_vars
@@ -102,7 +101,7 @@ function get_abs_build_var()
         echo "Couldn't locate the top of the tree.  Try setting TOP." >&2
         return
     fi
-    (\cd $T; CALLED_FROM_SETUP=true BUILD_SYSTEM=build/core \
+    (\cd $T; export CALLED_FROM_SETUP=true; export BUILD_SYSTEM=build/core; \
       command make --no-print-directory -f build/core/config.mk dumpvar-abs-$1)
 }
 
@@ -120,7 +119,7 @@ function get_build_var()
         echo "Couldn't locate the top of the tree.  Try setting TOP." >&2
         return
     fi
-    (\cd $T; CALLED_FROM_SETUP=true BUILD_SYSTEM=build/core \
+    (\cd $T; export CALLED_FROM_SETUP=true; export BUILD_SYSTEM=build/core; \
       command make --no-print-directory -f build/core/config.mk dumpvar-$1)
 }
 
@@ -337,8 +336,6 @@ function settitle()
 
 function check_bash_version()
 {
-    local T dir f
-
     # Keep us from trying to run in something that isn't bash.
     if [ -z "${BASH_VERSION}" ]; then
         return 1
@@ -547,9 +544,6 @@ function print_lunch_menu()
     local uname=$(uname)
     echo
     echo "You're building on" $uname
-    if [ "$(uname)" = "Darwin" ] ; then
-       echo "  (ohai, koush!)"
-    fi
     echo
     if [ "z${GLAZE_DEVICES_ONLY}" != "z" ]; then
        echo "Breakfast menu... pick a combo:"
@@ -572,56 +566,10 @@ function print_lunch_menu()
     echo
 }
 
-function brunch()
-{
-    breakfast $*
-    if [ $? -eq 0 ]; then
-        mka bacon
-    else
-        echo "No such item in brunch menu. Try 'breakfast'"
-        return 1
-    fi
-    return $?
-}
-
-function breakfast()
-{
-    target=$1
-    local variant=$2
-    GLAZE_DEVICES_ONLY="true"
-    unset LUNCH_MENU_CHOICES
-    add_lunch_combo full-eng
-    for f in `/bin/ls vendor/glaze/vendorsetup.sh 2> /dev/null`
-        do
-            echo "including $f"
-            . $f
-        done
-    unset f
-
-    if [ $# -eq 0 ]; then
-        # No arguments, so let's have the full menu
-        lunch
-    else
-        echo "z$target" | grep -q "-"
-        if [ $? -eq 0 ]; then
-            # A buildtype was specified, assume a full device name
-            lunch $target
-        else
-            # This is probably just the Glaze model name
-            if [ -z "$variant" ]; then
-                variant="userdebug"
-            fi
-            lunch glaze_$target-$variant
-        fi
-    fi
-    return $?
-}
-
-alias bib=breakfast
-
 function lunch()
 {
     local answer
+    LUNCH_MENU_CHOICES=($(for l in ${LUNCH_MENU_CHOICES[@]}; do echo "$l"; done | sort))
 
     if [ "$1" ] ; then
         answer=$1
@@ -667,9 +615,22 @@ function lunch()
     fi
 
     local product=$(echo -n $selection | sed -e "s/-.*$//")
+    check_product $product
+    if [ $? -ne 0 ]
+    then
+        # if we can't find a product, try to grab it off the GLAZE github
+        T=$(gettop)
+        pushd $T > /dev/null
+        vendor/glaze/build/tools/roomservice.py $product
+        popd > /dev/null
+        check_product $product
+    else
+        vendor/glaze/build/tools/roomservice.py $product true
+    fi
     TARGET_PRODUCT=$product \
     TARGET_BUILD_VARIANT=$variant \
     build_build_var_cache
+
     if [ $? -ne 0 ]
     then
         echo
@@ -689,6 +650,8 @@ function lunch()
     export TARGET_BUILD_TYPE=release
 
     echo
+
+    fixup_common_out_dir
 
     set_stuff_for_environment
     printconfig
@@ -844,7 +807,6 @@ function mm()
         local M=$(findmakefile)
         local MODULES=
         local GET_INSTALL_PATH=
-        local ARGS=
         # Remove the path to top as the makefilepath needs to be relative
         local M=`echo $M|sed 's:'$T'/::'`
         if [ ! "$T" ]; then
@@ -861,12 +823,12 @@ function mm()
             done
             if [ -n "$GET_INSTALL_PATH" ]; then
               MODULES=
-              ARGS=GET-INSTALL-PATH
+              # set all args to 'GET-INSTALL-PATH'
+              set -- GET-INSTALL-PATH
             else
               MODULES=all_modules
-              ARGS=$@
             fi
-            ONE_SHOT_MAKEFILE=$M $DRV make -C $T -f build/core/main.mk $MODULES $ARGS
+            ONE_SHOT_MAKEFILE=$M $DRV make -C $T -f build/core/main.mk $MODULES "$@"
         fi
     fi
 }
@@ -881,8 +843,15 @@ function mmm()
         local ARGS=
         local DIR TO_CHOP
         local GET_INSTALL_PATH=
-        local DASH_ARGS=$(echo "$@" | awk -v RS=" " -v ORS=" " '/^-.*$/')
-        local DIRS=$(echo "$@" | awk -v RS=" " -v ORS=" " '/^[^-].*$/')
+
+        if [ "$(__detect_shell)" = "zsh" ]; then
+            set -lA DASH_ARGS $(echo "$@" | awk -v RS=" " -v ORS=" " '/^-.*$/')
+            set -lA DIRS $(echo "$@" | awk -v RS=" " -v ORS=" " '/^[^-].*$/')
+        else
+            local DASH_ARGS=$(echo "$@" | awk -v RS=" " -v ORS=" " '/^-.*$/')
+            local DIRS=$(echo "$@" | awk -v RS=" " -v ORS=" " '/^[^-].*$/')
+        fi
+
         for DIR in $DIRS ; do
             MODULES=`echo $DIR | sed -n -e 's/.*:\(.*$\)/\1/p' | sed 's/,/ /'`
             if [ "$MODULES" = "" ]; then
@@ -948,8 +917,13 @@ function mmma()
   local T=$(gettop)
   local DRV=$(getdriver $T)
   if [ "$T" ]; then
-    local DASH_ARGS=$(echo "$@" | awk -v RS=" " -v ORS=" " '/^-.*$/')
-    local DIRS=$(echo "$@" | awk -v RS=" " -v ORS=" " '/^[^-].*$/')
+    if [ "$(__detect_shell)" = "zsh" ]; then
+        set -lA DASH_ARGS $(echo "$@" | awk -v RS=" " -v ORS=" " '/^-.*$/')
+        set -lA DIRS $(echo "$@" | awk -v RS=" " -v ORS=" " '/^[^-].*$/')
+    else
+        local DASH_ARGS=$(echo "$@" | awk -v RS=" " -v ORS=" " '/^-.*$/')
+        local DIRS=$(echo "$@" | awk -v RS=" " -v ORS=" " '/^[^-].*$/')
+    fi
     local MY_PWD=`PWD= /bin/pwd`
     if [ "$MY_PWD" = "$T" ]; then
       MY_PWD=
@@ -991,15 +965,6 @@ function croot()
         \cd $(gettop)
     else
         echo "Couldn't locate the top of the tree.  Try setting TOP."
-    fi
-}
-
-function cout()
-{
-    if [  "$OUT" ]; then
-        cd $OUT
-    else
-        echo "Couldn't locate out directory.  Try setting OUT."
     fi
 }
 
@@ -1630,10 +1595,10 @@ function get_make_command()
   echo command make
 }
 
-function make()
+function mk_timer()
 {
     local start_time=$(date +"%s")
-    $(get_make_command) "$@"
+    $@
     local ret=$?
     local end_time=$(date +"%s")
     local tdiff=$(($end_time-$start_time))
@@ -1697,16 +1662,30 @@ function provision()
     "$ANDROID_PRODUCT_OUT/provision-device" "$@"
 }
 
-if [ "x$SHELL" != "x/bin/bash" ]; then
+function make()
+{
+    mk_timer $(get_make_command) "$@"
+}
+
+function __detect_shell() {
     case `ps -o command -p $$` in
         *bash*)
+            echo bash
             ;;
         *zsh*)
+            echo zsh
             ;;
         *)
-            echo "WARNING: Only bash and zsh are supported, use of other shell may lead to erroneous results"
+            echo unknown
+            return 1
             ;;
     esac
+    return
+}
+
+
+if ! __detect_shell > /dev/null; then
+    echo "WARNING: Only bash and zsh are supported, use of other shell may lead to erroneous results"
 fi
 
 # Execute the contents of any vendorsetup.sh files we can find.
@@ -1734,4 +1713,4 @@ check_bash_version && {
 
 export ANDROID_BUILD_TOP=$(gettop)
 
-. $ANDROID_BUILD_TOP/vendor/glaze/build/envsetup.sh
+. vendor/glaze/build/envsetup.sh
