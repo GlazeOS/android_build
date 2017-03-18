@@ -24,6 +24,7 @@ PRODUCT_PACKAGES += \
     BasicDreams \
     BlockedNumberProvider \
     BookmarkProvider \
+		Calendar \
     CalendarProvider \
     CaptivePortalLogin \
     CertInstaller \
@@ -37,7 +38,7 @@ PRODUCT_PACKAGES += \
     InputDevices \
     KeyChain \
     Keyguard \
-    Launcher2 \
+    Launcher3 \
     ManagedProvisioning \
     MtpDocumentsProvider \
     PicoTts \
